@@ -1,0 +1,585 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local RS          = game:GetService("ReplicatedStorage")
+local Players     = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local COOLDOWN = 1  -- global cooldown in seconds, changed by Cooldown tab
+
+local Window = Fluent:CreateWindow({
+    Title       = "Be A Youtuber",
+    SubTitle    = "by Oorbits(destroyed game ezz)",
+    TabWidth    = 160,
+    Size        = UDim2.fromOffset(580, 460),
+    Acrylic     = true,
+    Theme       = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main     = Window:AddTab({ Title = "Main",     Icon = "home" }),
+    Shop     = Window:AddTab({ Title = "Shop",     Icon = "shopping-cart" }),
+    Gears    = Window:AddTab({ Title = "Gears",    Icon = "settings" }),
+    Events   = Window:AddTab({ Title = "Events",   Icon = "star" }),
+    House    = Window:AddTab({ Title = "House",    Icon = "layout" }),
+    Rebirths = Window:AddTab({ Title = "Rebirths", Icon = "refresh-cw" }),
+    Advanced = Window:AddTab({ Title = "Advanced", Icon = "cpu" }),
+    Cooldown = Window:AddTab({ Title = "Cooldown", Icon = "clock" }),
+}
+
+-- ─────────────────────────────────────────
+--  HELPERS
+-- ─────────────────────────────────────────
+
+local function getNames(folder)
+    local names = {}
+    local f = RS:FindFirstChild(folder)
+    if f then
+        for _, v in ipairs(f:GetChildren()) do
+            names[#names + 1] = v.Name
+        end
+    end
+    return names
+end
+
+local function getGearNames()
+    local names = {}
+    local f = RS:FindFirstChild("gear")
+    if f then
+        for _, v in ipairs(f:GetChildren()) do
+            local low = v.Name:lower()
+            if not low:find("award") and not low:find("trophy") then
+                names[#names + 1] = v.Name
+            end
+        end
+    end
+    return names
+end
+
+-- Used by Advanced tab (Auto Multiplier) — reads from Sim folder
+local function getMyBuildIDs()
+    local ids = {}
+    local plots = workspace:FindFirstChild("Plots")
+    if not plots then return ids end
+    for _, plot in ipairs(plots:GetChildren()) do
+        if plot:GetAttribute("plrName") == LocalPlayer.Name then
+            local sim = plot:FindFirstChild("Sim")
+            if sim then
+                for _, build in ipairs(sim:GetChildren()) do
+                    ids[#ids + 1] = build.Name
+                end
+            end
+            break
+        end
+    end
+    return ids
+end
+
+-- Used by Auto Collect All — reads from both Builds and Sim, merged and deduplicated
+local function getMyCollectIDs()
+    local ids = {}
+    local seen = {}
+    local plots = workspace:FindFirstChild("Plots")
+    if not plots then return ids end
+    for _, plot in ipairs(plots:GetChildren()) do
+        if plot:GetAttribute("plrName") == LocalPlayer.Name then
+            for _, folderName in ipairs({"Builds", "Sim"}) do
+                local folder = plot:FindFirstChild(folderName)
+                if folder then
+                    for _, build in ipairs(folder:GetChildren()) do
+                        if not seen[build.Name] then
+                            seen[build.Name] = true
+                            ids[#ids + 1] = build.Name
+                        end
+                    end
+                end
+            end
+            break
+        end
+    end
+    return ids
+end
+
+-- ─────────────────────────────────────────
+--  STATES
+-- ─────────────────────────────────────────
+
+local States = {
+    uploadAll      = false,
+    claimAll       = false,
+    collectAll     = false,
+    shopBuy        = false,
+    gearBuy        = false,
+    submitAll      = false,
+    openEgg        = false,
+    openEggAll     = false,
+    buyHouse       = false,
+    autoRebirth    = false,
+    autoUpgrade    = false,
+    collectAward   = false,
+    autoMultiplier = false,
+}
+
+local shopAmount      = 1
+local gearAmount      = 1
+local rebirthAmount   = 5
+local eggSpeed        = 1
+local shopSelected    = {}
+local gearSelected    = {}
+local upgradeSelected = {}
+
+-- ─────────────────────────────────────────
+--  MAIN TAB
+-- ─────────────────────────────────────────
+
+Tabs.Main:AddToggle("UploadAll", {
+    Title    = "Auto Upload All",
+    Default  = false,
+    Callback = function(v)
+        States.uploadAll = v
+        if v then
+            task.spawn(function()
+                while States.uploadAll do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("uploadAll"):FireServer()
+                    end)
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Main:AddToggle("ClaimAll", {
+    Title    = "Auto Claim All",
+    Default  = false,
+    Callback = function(v)
+        States.claimAll = v
+        if v then
+            task.spawn(function()
+                while States.claimAll do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("claimAll"):FireServer()
+                    end)
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Main:AddToggle("CollectAll", {
+    Title    = "Auto Collect All",
+    Default  = false,
+    Callback = function(v)
+        States.collectAll = v
+        if v then
+            task.spawn(function()
+                while States.collectAll do
+                    local ids = getMyCollectIDs()
+                    for _, id in ipairs(ids) do
+                        if not States.collectAll then break end
+                        pcall(function()
+                            RS:WaitForChild("events"):WaitForChild("collect"):FireServer(id)
+                        end)
+                        task.wait(0)
+                    end
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Main:AddToggle("CollectAward", {
+    Title    = "Auto Collect Award",
+    Default  = false,
+    Callback = function(v)
+        States.collectAward = v
+        if v then
+            task.spawn(function()
+                while States.collectAward do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("collectAward"):FireServer()
+                    end)
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  SHOP TAB
+-- ─────────────────────────────────────────
+
+local youtuberNames = getNames("youtubers")
+if #youtuberNames == 0 then youtuberNames = {"(None found — join a game first)"} end
+
+Tabs.Shop:AddInput("ShopAmount", {
+    Title    = "Amount to Buy",
+    Default  = "1",
+    Callback = function(v) shopAmount = tonumber(v) or 1 end
+})
+
+Tabs.Shop:AddDropdown("ShopDropdown", {
+    Title    = "Select Youtubers",
+    Values   = youtuberNames,
+    Multi    = true,
+    Default  = {},
+    Callback = function(v)
+        shopSelected = {}
+        for name, enabled in pairs(v) do
+            if enabled then shopSelected[#shopSelected + 1] = name end
+        end
+    end
+})
+
+Tabs.Shop:AddToggle("ShopBuy", {
+    Title    = "Auto Buy",
+    Default  = false,
+    Callback = function(v)
+        States.shopBuy = v
+        if v then
+            task.spawn(function()
+                while States.shopBuy do
+                    for _, name in ipairs(shopSelected) do
+                        if not States.shopBuy then break end
+                        pcall(function()
+                            RS:WaitForChild("events"):WaitForChild("buyYoutuber"):FireServer(name, shopAmount)
+                        end)
+                        task.wait(0)
+                    end
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  GEARS TAB
+-- ─────────────────────────────────────────
+
+local gearNames = getGearNames()
+if #gearNames == 0 then gearNames = {"(None found — join a game first)"} end
+
+Tabs.Gears:AddInput("GearAmount", {
+    Title    = "Amount to Buy",
+    Default  = "1",
+    Callback = function(v) gearAmount = math.abs(tonumber(v) or 1) end
+})
+
+Tabs.Gears:AddDropdown("GearDropdown", {
+    Title    = "Select Gears",
+    Values   = gearNames,
+    Multi    = true,
+    Default  = {},
+    Callback = function(v)
+        gearSelected = {}
+        for name, enabled in pairs(v) do
+            if enabled then gearSelected[#gearSelected + 1] = name end
+        end
+    end
+})
+
+Tabs.Gears:AddToggle("GearBuy", {
+    Title    = "Auto Buy",
+    Default  = false,
+    Callback = function(v)
+        States.gearBuy = v
+        if v then
+            task.spawn(function()
+                while States.gearBuy do
+                    for _, name in ipairs(gearSelected) do
+                        if not States.gearBuy then break end
+                        pcall(function()
+                            RS:WaitForChild("events"):WaitForChild("buyGear"):FireServer(name, gearAmount)
+                        end)
+                        task.wait(0)
+                    end
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  EVENTS TAB
+-- ─────────────────────────────────────────
+
+Tabs.Events:AddToggle("SubmitAll", {
+    Title    = "Auto Submit",
+    Default  = false,
+    Callback = function(v)
+        States.submitAll = v
+        if v then
+            task.spawn(function()
+                while States.submitAll do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("submitAll"):FireServer()
+                    end)
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Events:AddInput("EggSpeed", {
+    Title    = "Egg Open Speed",
+    Default  = "1",
+    Callback = function(v)
+        eggSpeed = math.max(0.05, tonumber(v) or 1)
+    end
+})
+
+Tabs.Events:AddToggle("OpenEgg", {
+    Title    = "Auto Open Egg",
+    Default  = false,
+    Callback = function(v)
+        States.openEgg = v
+        if v then
+            task.spawn(function()
+                while States.openEgg do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("openEventEgg"):FireServer(3)
+                    end)
+                    task.wait(eggSpeed)
+                end
+            end)
+        end
+    end
+})
+
+Tabs.Events:AddToggle("OpenEggAll", {
+    Title    = "Open Egg All (With Timer)",
+    Default  = false,
+    Callback = function(v)
+        States.openEggAll = v
+        if v then
+            task.spawn(function()
+                while States.openEggAll do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("openEventEgg"):FireServer(true)
+                    end)
+                    task.wait(eggSpeed)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  HOUSE TAB
+-- ─────────────────────────────────────────
+
+Tabs.House:AddToggle("BuyHouse", {
+    Title    = "Auto Buy House",
+    Default  = false,
+    Callback = function(v)
+        States.buyHouse = v
+        if v then
+            task.spawn(function()
+                while States.buyHouse do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("buyHouse"):FireServer(LocalPlayer)
+                    end)
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  REBIRTHS TAB
+-- ─────────────────────────────────────────
+
+Tabs.Rebirths:AddInput("RebirthAmount", {
+    Title    = "Rebirth Amount  (use your max rebirth count)",
+    Default  = "5",
+    Callback = function(v) rebirthAmount = tonumber(v) or 5 end
+})
+
+Tabs.Rebirths:AddToggle("AutoRebirth", {
+    Title    = "Auto Rebirth",
+    Default  = false,
+    Callback = function(v)
+        States.autoRebirth = v
+        if v then
+            task.spawn(function()
+                while States.autoRebirth do
+                    pcall(function()
+                        RS:WaitForChild("events"):WaitForChild("rebirth"):FireServer(rebirthAmount)
+                    end)
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+local upgradeOptions = {
+    { label = "Viral Chance",    key = "viralChance"      },
+    { label = "Views",           key = "views"            },
+    { label = "Luck",            key = "luck"             },
+    { label = "Cash",            key = "cash"             },
+    { label = "Upload Time",     key = "uploadTime"       },
+    { label = "Rebirth Buttons", key = "rebirthButtons"   },
+    { label = "Collab Time",     key = "collabTime"       },
+    { label = "Bulk Buy",        key = "bulkBuy"          },
+    { label = "Give All Boost",  key = "floorConsumables" },
+}
+
+local upgradeLabels     = {}
+local upgradeLabelToKey = {}
+for _, opt in ipairs(upgradeOptions) do
+    upgradeLabels[#upgradeLabels + 1] = opt.label
+    upgradeLabelToKey[opt.label] = opt.key
+end
+
+Tabs.Rebirths:AddDropdown("UpgradeDropdown", {
+    Title    = "Select Upgrades to Buy",
+    Values   = upgradeLabels,
+    Multi    = true,
+    Default  = {},
+    Callback = function(v)
+        upgradeSelected = {}
+        for label, enabled in pairs(v) do
+            if enabled then
+                upgradeSelected[#upgradeSelected + 1] = upgradeLabelToKey[label]
+            end
+        end
+    end
+})
+
+Tabs.Rebirths:AddToggle("AutoUpgrade", {
+    Title    = "Auto Upgrade",
+    Default  = false,
+    Callback = function(v)
+        States.autoUpgrade = v
+        if v then
+            task.spawn(function()
+                while States.autoUpgrade do
+                    for _, key in ipairs(upgradeSelected) do
+                        if not States.autoUpgrade then break end
+                        pcall(function()
+                            RS:WaitForChild("events"):WaitForChild("buyUpgrade"):FireServer(key)
+                        end)
+                        task.wait(0)
+                    end
+                    task.wait(COOLDOWN)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  ADVANCED TAB
+-- ─────────────────────────────────────────
+
+local multiplierSpeed  = 5
+local multiplierDrinks = { "Bloxy Cola", "Witches Brew", "Hot Sauce" }
+
+Tabs.Advanced:AddInput("MultiplierSpeed", {
+    Title    = "Seconds",
+    Default  = "5",
+    Callback = function(v)
+        multiplierSpeed = math.max(1, tonumber(v) or 5)
+    end
+})
+
+Tabs.Advanced:AddToggle("AutoMultiplier", {
+    Title    = "Auto Put Multiplier (Smart)",
+    Default  = false,
+    Callback = function(v)
+        States.autoMultiplier = v
+        if v then
+            task.spawn(function()
+                while States.autoMultiplier do
+                    for _, drink in ipairs(multiplierDrinks) do
+                        if not States.autoMultiplier then break end
+
+                        pcall(function()
+                            RS:WaitForChild("events"):WaitForChild("buyGear"):FireServer(drink, 1)
+                        end)
+                        task.wait(0.3)
+
+                        pcall(function()
+                            RS:WaitForChild("events"):WaitForChild("equipGear"):FireServer(drink, true)
+                        end)
+                        task.wait(0.2)
+
+                        for floor = 0, 50 do
+                            if not States.autoMultiplier then break end
+                            pcall(function()
+                                RS:WaitForChild("events"):WaitForChild("useGear"):FireServer({
+                                    floor = tostring(floor),
+                                    mode  = "floor"
+                                })
+                            end)
+                            task.wait(0.2)
+                        end
+                    end
+                    task.wait(multiplierSpeed)
+                end
+            end)
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  COOLDOWN TAB
+-- ─────────────────────────────────────────
+
+Tabs.Cooldown:AddInput("GlobalCooldown", {
+    Title    = "Global Cooldown (seconds)",
+    Default  = "1",
+    Callback = function(v)
+        local num = tonumber(v)
+        if num and num > 0 then
+            COOLDOWN = num
+        end
+    end
+})
+
+-- ─────────────────────────────────────────
+--  PRIVATE TAB
+-- ─────────────────────────────────────────
+
+local dupeAmount = 0
+
+Tabs.Private:AddInput("DupeAmount", {
+    Title    = "Amount",
+    Default  = "1000",
+    Callback = function(v)
+        dupeAmount = tonumber(v) or 0
+    end
+})
+
+Tabs.Private:AddButton({
+    Title    = "Money Dupe",
+    Callback = function()
+        local negativeAmount = -math.abs(dupeAmount)
+        pcall(function()
+            RS:WaitForChild("events"):WaitForChild("buyGear"):FireServer("Dusty WiFi Router", negativeAmount)
+        end)
+    end
+})
+
+-- ─────────────────────────────────────────
+--  FINISH
+-- ─────────────────────────────────────────
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title    = "Hub Loaded",
+    Content  = "Welcome, " .. LocalPlayer.Name .. "! Oorbits Hub is ready.",
+    Duration = 5,
+})
