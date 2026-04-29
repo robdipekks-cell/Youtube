@@ -27,6 +27,7 @@ local Tabs = {
     Rebirths = Window:AddTab({ Title = "Rebirths", Icon = "refresh-cw" }),
     Advanced = Window:AddTab({ Title = "Advanced", Icon = "cpu" }),
     Cooldown = Window:AddTab({ Title = "Cooldown", Icon = "clock" }),
+    Private  = Window:AddTab({ Title = "Private",  Icon = "lock" }),
 }
 
 -- ─────────────────────────────────────────
