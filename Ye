@@ -573,15 +573,6 @@ Tabs.Private:AddButton({
     end
 })
 
--- ─────────────────────────────────────────
---  FINISH
--- ─────────────────────────────────────────
-
--- Addons:
--- SaveManager (Allows you to have a configuration system)
--- InterfaceManager (Allows you to have a interface managment system)
- 
--- Hand the library over to our managers
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
  
