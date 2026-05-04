@@ -549,30 +549,6 @@ Tabs.Cooldown:AddInput("GlobalCooldown", {
     end
 })
 
--- ─────────────────────────────────────────
---  PRIVATE TAB
--- ─────────────────────────────────────────
-
-local dupeAmount = 0
-
-Tabs.Private:AddInput("DupeAmount", {
-    Title    = "Amount",
-    Default  = "1000",
-    Callback = function(v)
-        dupeAmount = tonumber(v) or 0
-    end
-})
-
-Tabs.Private:AddButton({
-    Title    = "Money Dupe",
-    Callback = function()
-        local negativeAmount = -math.abs(dupeAmount)
-        pcall(function()
-            RS:WaitForChild("events"):WaitForChild("buyGear"):FireServer("Dusty WiFi Router", negativeAmount)
-        end)
-    end
-})
-
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
  
